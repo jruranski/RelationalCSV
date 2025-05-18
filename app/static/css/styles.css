@@ -1,0 +1,45 @@
+/* Additional styles for DataLoom */
+body {
+    background-color: #f8f9fa;
+}
+
+.container-fluid {
+    max-width: 1400px;
+}
+
+.card {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border: none;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-success {
+    background-color: #198754;
+    border-color: #198754;
+}
+
+.table-responsive {
+    border-radius: 0.25rem;
+}
+
+.preview-container {
+    border-radius: 0.25rem;
+    border: 1px solid rgba(0, 0, 0, 0.125);
+    padding: 15px;
+    background-color: #fff;
+} 
