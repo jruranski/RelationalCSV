@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, DateTime, inspect
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, DateTime, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import datetime
@@ -39,8 +39,53 @@ def get_db():
 # Function to execute SQL directly
 def execute_sql(sql_query):
     with engine.connect() as connection:
-        result = connection.execute(sql_query)
-        return result
+        # Begin a transaction 
+        trans = connection.begin()
+        try:
+            # Split the input SQL string into individual statements
+            # Simple split by semicolon won't work well with complex SQL
+            # that might have semicolons inside quotes or comments
+            raw_statements = [stmt.strip() for stmt in sql_query.split(';') if stmt.strip()]
+            statements = []
+            
+            # Basic cleaning of statements
+            for stmt in raw_statements:
+                # Skip empty statements
+                if not stmt.strip():
+                    continue
+                
+                # Basic validation
+                if stmt.upper().startswith(('CREATE', 'DROP', 'ALTER', 'INSERT', 'UPDATE', 'DELETE', 'SELECT')):
+                    # Statement looks valid, clean it further
+                    # Remove trailing commas before closing parenthesis
+                    cleaned_stmt = stmt.replace(",\n)", "\n)")
+                    cleaned_stmt = cleaned_stmt.replace(", )", ")")
+                    statements.append(cleaned_stmt)
+                else:
+                    print(f"Warning: Skipping invalid SQL statement: {stmt[:50]}...")
+            
+            results = []
+            
+            # Execute each statement separately
+            for statement in statements:
+                try:
+                    print(f"Executing statement: {statement}")
+                    # Use SQLAlchemy's text() to properly prepare the statement
+                    result = connection.execute(text(statement))
+                    results.append(result)
+                except Exception as e:
+                    # Print more info about the failed statement
+                    print(f"Failed statement: {statement}")
+                    print(f"Error: {str(e)}")
+                    trans.rollback()
+                    raise Exception(f"Error executing statement: {statement}\nError: {str(e)}")
+            
+            # Commit the transaction if all statements succeeded
+            trans.commit()
+            return results
+        except Exception as e:
+            trans.rollback()
+            raise e
 
 # Function to retrieve database schema information
 def get_db_schema():
@@ -92,3 +137,64 @@ def get_db_schema():
         schema_info.append(table_info)
         
     return schema_info 
+
+# Function to get all user tables (excluding system and internal tables)
+def get_user_tables():
+    """Get a list of all user-created tables in the database (excluding internal tables)"""
+    inspector = inspect(engine)
+    tables = []
+    
+    # Get all table names
+    table_names = inspector.get_table_names()
+    
+    for table_name in table_names:
+        # Skip internal tables
+        if table_name == 'uploaded_files' or table_name.startswith('sqlite_'):
+            continue
+        
+        # Get column count
+        columns = inspector.get_columns(table_name)
+        column_count = len(columns)
+        
+        # Try to get row count (might be slow for large tables)
+        row_count = 0
+        try:
+            with engine.connect() as connection:
+                result = connection.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                row_count = result.scalar()
+        except:
+            pass
+        
+        tables.append({
+            "name": table_name,
+            "column_count": column_count,
+            "row_count": row_count
+        })
+    
+    return tables
+
+# Function to delete a table
+def delete_table(table_name):
+    """Delete a table from the database"""
+    # Check if table exists
+    inspector = inspect(engine)
+    if table_name not in inspector.get_table_names():
+        return False, f"Table '{table_name}' not found"
+    
+    # Don't allow deleting internal tables
+    if table_name == 'uploaded_files' or table_name.startswith('sqlite_'):
+        return False, f"Cannot delete internal table '{table_name}'"
+    
+    try:
+        with engine.connect() as connection:
+            trans = connection.begin()
+            try:
+                # Drop the table
+                connection.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+                trans.commit()
+                return True, f"Table '{table_name}' deleted successfully"
+            except Exception as e:
+                trans.rollback()
+                return False, f"Error deleting table: {str(e)}"
+    except Exception as e:
+        return False, f"Error connecting to database: {str(e)}" 

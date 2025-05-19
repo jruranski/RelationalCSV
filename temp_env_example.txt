@@ -1,0 +1,15 @@
+# FastAPI and general settings
+PORT=8000
+ENV=development
+DEBUG=True
+SECRET_KEY=your_secret_key_here
+
+# OpenAI API settings
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini
+
+# Database settings
+DATABASE_URL=sqlite:///dataloom.db
+
+# Optional: Other API keys
+# ANOTHER_API_KEY=your_api_key_here

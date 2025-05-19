@@ -17,7 +17,7 @@ async def upload_file(
     db: Session = Depends(get_db)
 ):
     """Upload a new CSV file"""
-    if not file.filename.endswith('.csv'):
+    if not file or not file.filename or not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are allowed")
     
     return file_service.save_file(file, db)
@@ -107,4 +107,45 @@ def delete_all_files(db: Session = Depends(get_db)):
 @router.get("/schema/database", response_model=List[Dict[str, Any]])
 def get_database_schema():
     """Get the current database schema"""
-    return get_db_schema() 
+    return get_db_schema()
+
+@router.post("/multiple", response_model=Dict[str, Any])
+async def upload_multiple_files(
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload multiple CSV files at once"""
+    results = {
+        "total": len(files),
+        "successful": 0,
+        "failed": 0,
+        "files": []
+    }
+    
+    for file in files:
+        try:
+            if not file or not file.filename or not file.filename.endswith('.csv'):
+                results["failed"] += 1
+                results["files"].append({
+                    "filename": file.filename if file and file.filename else "Unknown file",
+                    "success": False,
+                    "error": "Only CSV files are allowed"
+                })
+                continue
+            
+            saved_file = file_service.save_file(file, db)
+            results["successful"] += 1
+            results["files"].append({
+                "filename": file.filename,
+                "success": True,
+                "id": saved_file.id
+            })
+        except Exception as e:
+            results["failed"] += 1
+            results["files"].append({
+                "filename": file.filename if file and file.filename else "Unknown file",
+                "success": False,
+                "error": str(e)
+            })
+    
+    return results 

@@ -1,0 +1,12 @@
+# OpenAI API Settings
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Application Settings
+DEBUG=True
+SECRET_KEY=your_secret_key_here
+
+# Database Settings
+DATABASE_URL=sqlite:///dataloom.db
+
+# API Settings
+API_PREFIX=/api/v1 

@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataLoom - CSV to SQL Graph</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/styles.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <!-- CodeMirror for SQL editor -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/dracula.min.css">
+    <style>
+        .CodeMirror {
+            height: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .file-item {
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            transition: background-color 0.2s;
+        }
+        .file-item:hover {
+            background-color: #f0f0f0;
+        }
+        .file-item.selected {
+            background-color: #e9ecef;
+            border-left: 3px solid #0d6efd;
+        }
+        .progress-container {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .schema-card, .relationship-card {
+            margin-bottom: 15px;
+        }
+        .tab-pane {
+            padding: 20px 0;
+        }
+        .sticky-tabs {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background-color: #fff;
+            padding-top: 15px;
+        }
+        .progress-log {
+            font-family: monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+        .progress-log .log-item {
+            padding: 4px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .modal .progress-log .log-item {
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            background-color: #f8f9fa;
+            border-left: 3px solid #0d6efd;
+        }
+        .modal .progress-log .log-item:nth-child(odd) {
+            background-color: #f2f3f5;
+        }
+        .schema-item {
+            border-left: 4px solid #0d6efd;
+            padding-left: 10px;
+            margin-bottom: 15px;
+        }
+        .relationship-item {
+            border-left: 4px solid #fd7e14;
+            padding-left: 10px;
+            margin-bottom: 15px;
+        }
+        #executeBtn {
+            transition: all 0.3s;
+        }
+        #executeBtn:disabled {
+            cursor: not-allowed;
+        }
+        .nav-pills .nav-link {
+            margin-right: 5px;
+        }
+        .schema-section, .relationship-section, .sql-section {
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .section-title {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .relationship-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-right: 5px;
+        }
+        .badge-one-to-one {
+            background-color: #cfe2ff;
+            color: #084298;
+        }
+        .badge-many-to-one {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        .badge-many-to-many {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <h1 class="text-center mb-4">DataLoom - AI-Powered CSV to SQL Schema</h1>
+        
+        <!-- Main Tabs -->
+        <ul class="nav nav-tabs sticky-tabs mb-4" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" href="/" role="tab">
+                    <i class="bi bi-house"></i> Home
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="graph-tab" data-bs-toggle="tab" data-bs-target="#graph-tab-pane" type="button" role="tab" aria-controls="graph-tab-pane" aria-selected="true">
+                    <i class="bi bi-diagram-3"></i> AI Schema Builder
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="mainTabsContent">
+            <!-- Graph Tab -->
+            <div class="tab-pane fade show active" id="graph-tab-pane" role="tabpanel" aria-labelledby="graph-tab" tabindex="0">
+                <div class="row">
+                    <!-- Left Column - File Selection -->
+                    <div class="col-md-3">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5 class="mb-0">Select Files</h5>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted mb-3">Select CSV files to process with the AI schema builder</p>
+                                <div id="fileList" class="mb-3">
+                                    <div class="text-center py-3 text-muted">
+                                        <i class="bi bi-cloud-upload fs-2"></i>
+                                        <p class="mt-2">No files uploaded yet</p>
+                                        <p>Go to the <a href="/">Home page</a> to upload files</p>
+                                    </div>
+                                </div>
+                                <button id="processBtn" class="btn btn-primary w-100" disabled>
+                                    <i class="bi bi-play-fill"></i> Start AI Processing
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Processing Log</h5>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="progressContainer" class="progress-container p-3">
+                                    <div id="progressLog" class="progress-log">
+                                        <div class="text-center py-3 text-muted">
+                                            <p>Processing log will appear here</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Right Column - Results -->
+                    <div class="col-md-9">
+                        <div id="resultsContainer" style="display: none;">
+                            <ul class="nav nav-pills mb-3" id="resultsTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="sql-tab" data-bs-toggle="pill" data-bs-target="#sql-content" type="button" role="tab" aria-controls="sql-content" aria-selected="true">
+                                        <i class="bi bi-code-square"></i> SQL Query
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="schemas-tab" data-bs-toggle="pill" data-bs-target="#schemas-content" type="button" role="tab" aria-controls="schemas-content" aria-selected="false">
+                                        <i class="bi bi-table"></i> Table Schemas
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="relationships-tab" data-bs-toggle="pill" data-bs-target="#relationships-content" type="button" role="tab" aria-controls="relationships-content" aria-selected="false">
+                                        <i class="bi bi-link-45deg"></i> Relationships
+                                    </button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content" id="resultsTabsContent">
+                                <!-- SQL Content -->
+                                <div class="tab-pane fade show active" id="sql-content" role="tabpanel" aria-labelledby="sql-tab" tabindex="0">
+                                    <div class="sql-section">
+                                        <div class="section-header">
+                                            <h3 class="section-title">Generated SQL Query</h3>
+                                            <div>
+                                                <button id="copyBtn" class="btn btn-sm btn-outline-primary me-2">
+                                                    <i class="bi bi-clipboard"></i> Copy
+                                                </button>
+                                                <button id="executeBtn" class="btn btn-sm btn-success">
+                                                    <i class="bi bi-play-fill"></i> Execute Query
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <p class="text-muted mb-3">This SQL query was generated by analyzing your CSV files. You can edit it before execution.</p>
+                                        <textarea id="sqlEditor"></textarea>
+                                        <div id="executionResult" class="alert mt-3" style="display: none;"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Schemas Content -->
+                                <div class="tab-pane fade" id="schemas-content" role="tabpanel" aria-labelledby="schemas-tab" tabindex="0">
+                                    <div class="schema-section">
+                                        <div class="section-header">
+                                            <h3 class="section-title">Table Schemas</h3>
+                                        </div>
+                                        <p class="text-muted mb-3">These tables were derived from your CSV files, with appropriate data types and constraints.</p>
+                                        <div id="schemasContainer"></div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Relationships Content -->
+                                <div class="tab-pane fade" id="relationships-content" role="tabpanel" aria-labelledby="relationships-tab" tabindex="0">
+                                    <div class="relationship-section">
+                                        <div class="section-header">
+                                            <h3 class="section-title">Table Relationships</h3>
+                                        </div>
+                                        <p class="text-muted mb-3">These relationships were intelligently discovered by analyzing your data patterns across files.</p>
+                                        <div id="relationshipsContainer"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Empty State -->
+                        <div id="emptyState" class="text-center py-5">
+                            <div class="py-5">
+                                <i class="bi bi-diagram-3 text-muted" style="font-size: 5rem;"></i>
+                                <h3 class="mt-4 text-muted">AI Schema Builder</h3>
+                                <p class="text-muted">
+                                    Select files from the left panel and click "Start AI Processing" <br>
+                                    to generate a complete SQL schema based on your CSV files.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-body py-4">
+                    <div class="text-center mb-3">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h5 id="loadingMessage">Processing files...</h5>
+                    </div>
+                    <div class="progress-container border rounded p-2 mt-3" style="max-height: 200px; overflow-y: auto;">
+                        <div id="modalProgressLog" class="progress-log">
+                            <div class="log-item text-muted text-center">This may take a few moments</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Success Modal -->
+    <div class="modal fade" id="successModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Success</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="successMessage">
+                    Operation completed successfully.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/sql/sql.min.js"></script>
+    <script>
+        // Global variables
+        let selectedFileIds = [];
+        let sqlEditor;
+        let ws;
+        const clientId = `client_${Date.now()}`;
+        const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+        
+        // Initialize CodeMirror for SQL editor
+        document.addEventListener('DOMContentLoaded', function() {
+            // Debug DOM elements
+            console.log('Checking critical DOM elements:');
+            const progressLogElement = document.getElementById('progressLog');
+            console.log('progressLog element:', progressLogElement);
+            const modalProgressLogElement = document.getElementById('modalProgressLog');
+            console.log('modalProgressLog element:', modalProgressLogElement);
+            const loadingModalElement = document.getElementById('loadingModal');
+            console.log('loadingModal element:', loadingModalElement);
+            
+            // Initialize CodeMirror
+            sqlEditor = CodeMirror.fromTextArea(document.getElementById('sqlEditor'), {
+                mode: 'text/x-sql',
+                theme: 'dracula',
+                lineNumbers: true,
+                indentWithTabs: true,
+                smartIndent: true,
+                lineWrapping: true,
+                matchBrackets: true,
+                autofocus: false,
+                extraKeys: {
+                    "Ctrl-Space": "autocomplete"
+                }
+            });
+            
+            // Load files
+            loadFiles();
+            
+            // Setup process button
+            document.getElementById('processBtn').addEventListener('click', startProcessing);
+            
+            // Setup execute button
+            document.getElementById('executeBtn').addEventListener('click', executeSQL);
+            
+            // Setup copy button
+            document.getElementById('copyBtn').addEventListener('click', copySQL);
+            
+            // Connect WebSocket
+            connectWebSocket();
+        });
+        
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/graph/ws/${clientId}`;
+            
+            console.log('Connecting to WebSocket at:', wsUrl);
+            
+            if (ws) {
+                console.log('Closing existing WebSocket connection');
+                ws.close();
+            }
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                console.log('WebSocket connected successfully');
+                document.getElementById('processBtn').disabled = selectedFileIds.length === 0;
+                
+                // Send ping every 30 seconds to keep connection alive
+                setInterval(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({action: 'ping'}));
+                    }
+                }, 30000);
+            };
+            
+            ws.onmessage = function(event) {
+                console.log('Raw WebSocket message received:', event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error, event.data);
+                }
+            };
+            
+            ws.onclose = function(event) {
+                console.log('WebSocket disconnected, code:', event.code, 'reason:', event.reason);
+                document.getElementById('processBtn').disabled = true;
+                
+                // Try to reconnect in 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                document.getElementById('processBtn').disabled = true;
+            };
+        }
+        
+        // Handle WebSocket messages
+        function handleWebSocketMessage(data) {
+            console.log('Received WebSocket message:', data);
+            
+            switch(data.type) {
+                case 'progress':
+                    console.log('Processing progress message:', data.message);
+                    updateProgress(data.message);
+                    break;
+                case 'results':
+                    console.log('Received results');
+                    processResults(data.data);
+                    hideLoadingModal();
+                    break;
+                case 'error':
+                    console.error('Received error:', data.message);
+                    showError(data.message);
+                    hideLoadingModal();
+                    break;
+                case 'sql_executed':
+                    console.log('SQL executed successfully');
+                    showSQLExecutionResult(true, data.message);
+                    break;
+                case 'pong':
+                    console.log('Received pong');
+                    // Do nothing, just acknowledge the ping
+                    break;
+                default:
+                    console.warn('Unknown message type:', data.type);
+            }
+        }
+        
+        // Load files from API
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/files');
+                const files = await response.json();
+                renderFileList(files);
+            } catch (error) {
+                console.error('Error loading files:', error);
+            }
+        }
+        
+        // Render file list
+        function renderFileList(files) {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+            
+            if (files.length === 0) {
+                fileList.innerHTML = `
+                    <div class="text-center py-3 text-muted">
+                        <i class="bi bi-cloud-upload fs-2"></i>
+                        <p class="mt-2">No files uploaded yet</p>
+                        <p>Go to the <a href="/">Home page</a> to upload files</p>
+                    </div>
+                `;
+                document.getElementById('processBtn').disabled = true;
+                return;
+            }
+            
+            const csvFiles = files.filter(file => file.original_filename.toLowerCase().endsWith('.csv'));
+            
+            if (csvFiles.length === 0) {
+                fileList.innerHTML = `
+                    <div class="text-center py-3 text-muted">
+                        <i class="bi bi-cloud-upload fs-2"></i>
+                        <p class="mt-2">No CSV files uploaded</p>
+                        <p>Go to the <a href="/">Home page</a> to upload CSV files</p>
+                    </div>
+                `;
+                document.getElementById('processBtn').disabled = true;
+                return;
+            }
+            
+            csvFiles.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item d-flex align-items-center';
+                fileItem.dataset.fileId = file.id;
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'form-check-input me-2';
+                checkbox.addEventListener('change', () => {
+                    toggleFileSelection(file.id);
+                    fileItem.classList.toggle('selected', checkbox.checked);
+                });
+                
+                const fileInfo = document.createElement('div');
+                fileInfo.className = 'flex-grow-1';
+                fileInfo.innerHTML = `
+                    <span>${file.original_filename}</span>
+                    <br>
+                    <small class="text-muted">${file.row_count || 'N/A'} rows</small>
+                `;
+                
+                fileItem.appendChild(checkbox);
+                fileItem.appendChild(fileInfo);
+                fileList.appendChild(fileItem);
+            });
+            
+            document.getElementById('processBtn').disabled = true;
+        }
+        
+        // Toggle file selection
+        function toggleFileSelection(fileId) {
+            const index = selectedFileIds.indexOf(fileId);
+            if (index === -1) {
+                selectedFileIds.push(fileId);
+            } else {
+                selectedFileIds.splice(index, 1);
+            }
+            
+            document.getElementById('processBtn').disabled = selectedFileIds.length === 0;
+        }
+        
+        // Start processing
+        function startProcessing() {
+            console.log('Starting processing with file IDs:', selectedFileIds);
+            
+            if (selectedFileIds.length === 0) {
+                alert('Please select at least one file to process');
+                return;
+            }
+            
+            // Reset UI
+            document.getElementById('progressLog').innerHTML = '';
+            
+            // Clear and initialize modal progress log
+            const modalProgressLog = document.getElementById('modalProgressLog');
+            if (modalProgressLog) {
+                modalProgressLog.innerHTML = '<div class="log-item text-muted text-center">Starting process...</div>';
+                console.log('Modal progress log initialized');
+            } else {
+                console.error('modalProgressLog element not found');
+            }
+            
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('resultsContainer').style.display = 'none';
+            
+            // Show loading modal
+            document.getElementById('loadingMessage').textContent = 'Processing files...';
+            loadingModal.show();
+            console.log('Loading modal displayed');
+            
+            // Send WebSocket message to start processing
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.log('WebSocket not connected, attempting to reconnect...');
+                connectWebSocket();
+                
+                // Wait for connection and retry in 1 second
+                setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        sendProcessingMessage();
+                    } else {
+                        console.error('Could not establish WebSocket connection');
+                        showError('Could not establish WebSocket connection. Please refresh the page and try again.');
+                        hideLoadingModal();
+                    }
+                }, 1000);
+            } else {
+                sendProcessingMessage();
+            }
+        }
+        
+        // Send processing message through WebSocket
+        function sendProcessingMessage() {
+            const message = JSON.stringify({
+                action: 'process',
+                file_ids: selectedFileIds
+            });
+            console.log('Sending WebSocket message:', message);
+            ws.send(message);
+        }
+        
+        // Update progress
+        function updateProgress(message) {
+            console.log('Updating progress with message:', message);
+            
+            // Update sidebar progress log
+            const progressLog = document.getElementById('progressLog');
+            if (!progressLog) {
+                console.error('progressLog element not found');
+            } else {
+                const logItem = document.createElement('div');
+                logItem.className = 'log-item';
+                logItem.textContent = message;
+                progressLog.appendChild(logItem);
+                
+                // Auto-scroll to bottom
+                progressLog.scrollTop = progressLog.scrollHeight;
+            }
+            
+            // Update modal progress log
+            const modalProgressLog = document.getElementById('modalProgressLog');
+            if (!modalProgressLog) {
+                console.error('modalProgressLog element not found');
+            } else {
+                const modalLogItem = document.createElement('div');
+                modalLogItem.className = 'log-item';
+                modalLogItem.textContent = message;
+                modalProgressLog.appendChild(modalLogItem);
+                modalProgressLog.scrollTop = modalProgressLog.scrollHeight;
+                console.log('Added message to modal progress log:', message.substring(0, 30) + (message.length > 30 ? '...' : ''));
+                
+                // Force browser to render update by triggering reflow
+                void modalProgressLog.offsetHeight;
+            }
+        }
+        
+        // Process results
+        function processResults(results) {
+            // Show results container, hide empty state
+            document.getElementById('resultsContainer').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+            
+            // Set SQL query
+            sqlEditor.setValue(results.sql_query || '-- No SQL query generated');
+            
+            // Render schemas
+            renderSchemas(results.schemas);
+            
+            // Render relationships
+            renderRelationships(results.relationships);
+            
+            // Show success message
+            document.getElementById('successMessage').textContent = 'Schema generated successfully!';
+            successModal.show();
+        }
+        
+        // Render schemas
+        function renderSchemas(schemas) {
+            const schemasContainer = document.getElementById('schemasContainer');
+            schemasContainer.innerHTML = '';
+            
+            if (!schemas || schemas.length === 0) {
+                schemasContainer.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        No schemas were generated from the selected files.
+                    </div>
+                `;
+                return;
+            }
+            
+            schemas.forEach(schemaJson => {
+                try {
+                    const schema = typeof schemaJson === 'string' ? JSON.parse(schemaJson) : schemaJson;
+                    
+                    const schemaItem = document.createElement('div');
+                    schemaItem.className = 'schema-item';
+                    
+                    const schemaHeader = document.createElement('h4');
+                    schemaHeader.className = 'mb-3';
+                    schemaHeader.textContent = schema.table_name;
+                    
+                    const columnsList = document.createElement('div');
+                    columnsList.className = 'table-responsive';
+                    
+                    // Create columns table
+                    const columnsTable = document.createElement('table');
+                    columnsTable.className = 'table table-sm table-striped';
+                    
+                    const tHead = document.createElement('thead');
+                    tHead.innerHTML = `
+                        <tr>
+                            <th>Column</th>
+                            <th>Type</th>
+                            <th>Constraints</th>
+                        </tr>
+                    `;
+                    columnsTable.appendChild(tHead);
+                    
+                    const tBody = document.createElement('tbody');
+                    schema.columns.forEach(column => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${column.name}</strong></td>
+                            <td><code>${column.type}</code></td>
+                            <td>${column.constraints.join(', ') || '-'}</td>
+                        `;
+                        tBody.appendChild(tr);
+                    });
+                    columnsTable.appendChild(tBody);
+                    
+                    columnsList.appendChild(columnsTable);
+                    
+                    schemaItem.appendChild(schemaHeader);
+                    schemaItem.appendChild(columnsList);
+                    schemasContainer.appendChild(schemaItem);
+                } catch (e) {
+                    console.error('Error parsing schema:', e);
+                }
+            });
+        }
+        
+        // Render relationships
+        function renderRelationships(relationships) {
+            const relationshipsContainer = document.getElementById('relationshipsContainer');
+            relationshipsContainer.innerHTML = '';
+            
+            if (!relationships || relationships.length === 0) {
+                relationshipsContainer.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        No relationships were detected between the tables.
+                    </div>
+                `;
+                return;
+            }
+            
+            relationships.forEach(relationship => {
+                const relationshipItem = document.createElement('div');
+                relationshipItem.className = 'relationship-item';
+                
+                let relationshipTypeBadge = '';
+                if (relationship.relationship_type === 'one-to-one') {
+                    relationshipTypeBadge = '<span class="relationship-badge badge-one-to-one">One-to-One</span>';
+                } else if (relationship.relationship_type === 'many-to-one') {
+                    relationshipTypeBadge = '<span class="relationship-badge badge-many-to-one">Many-to-One</span>';
+                } else if (relationship.relationship_type === 'many-to-many') {
+                    relationshipTypeBadge = '<span class="relationship-badge badge-many-to-many">Many-to-Many</span>';
+                }
+                
+                const relationshipHeader = document.createElement('h4');
+                relationshipHeader.className = 'mb-3';
+                relationshipHeader.innerHTML = `${relationshipTypeBadge} ${relationship.relationship_name}`;
+                
+                const relationshipDetails = document.createElement('div');
+                relationshipDetails.className = 'card mb-3';
+                
+                let relationshipContent = `
+                    <div class="card-body">
+                        <p><strong>Description:</strong> ${relationship.relationship_description}</p>
+                        <p><strong>Table:</strong> ${relationship.table_name}</p>
+                        <p><strong>Foreign Key:</strong> ${relationship.foreign_key}</p>
+                `;
+                
+                if (relationship.relationship_type === 'many-to-many') {
+                    relationshipContent += `
+                        <p><strong>Join Table:</strong> ${relationship.join_table || 'N/A'}</p>
+                        <p><strong>Target Table:</strong> ${relationship.target_table || 'N/A'}</p>
+                        <p><strong>Target Key:</strong> ${relationship.target_key || 'N/A'}</p>
+                    `;
+                }
+                
+                relationshipContent += `</div>`;
+                relationshipDetails.innerHTML = relationshipContent;
+                
+                relationshipItem.appendChild(relationshipHeader);
+                relationshipItem.appendChild(relationshipDetails);
+                relationshipsContainer.appendChild(relationshipItem);
+            });
+        }
+        
+        // Execute SQL
+        function executeSQL() {
+            const sql = sqlEditor.getValue().trim();
+            
+            if (!sql) {
+                alert('Please enter a SQL query to execute');
+                return;
+            }
+            
+            // Disable button
+            const executeBtn = document.getElementById('executeBtn');
+            executeBtn.disabled = true;
+            executeBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Executing...';
+            
+            // Clear previous results
+            const executionResult = document.getElementById('executionResult');
+            executionResult.style.display = 'none';
+            
+            // Send WebSocket message to execute SQL
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'execute_sql',
+                    sql_query: sql
+                }));
+            } else {
+                // Fallback to HTTP API if WebSocket is not available
+                executeWithAPI(sql);
+            }
+        }
+        
+        // Execute SQL with API (fallback)
+        async function executeWithAPI(sql) {
+            try {
+                const response = await fetch('/api/graph/execute-sql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ sql_query: sql })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showSQLExecutionResult(true, result.message);
+                } else {
+                    showSQLExecutionResult(false, result.detail || 'Unknown error');
+                }
+            } catch (error) {
+                showSQLExecutionResult(false, error.message || 'Failed to execute SQL query');
+            }
+        }
+        
+        // Show SQL execution result
+        function showSQLExecutionResult(success, message) {
+            const executionResult = document.getElementById('executionResult');
+            executionResult.className = success ? 'alert alert-success' : 'alert alert-danger';
+            executionResult.textContent = message;
+            executionResult.style.display = 'block';
+            
+            // Re-enable button
+            const executeBtn = document.getElementById('executeBtn');
+            executeBtn.disabled = false;
+            executeBtn.innerHTML = '<i class="bi bi-play-fill"></i> Execute Query';
+        }
+        
+        // Copy SQL to clipboard
+        function copySQL() {
+            const sql = sqlEditor.getValue();
+            
+            if (!sql) {
+                alert('No SQL query to copy');
+                return;
+            }
+            
+            navigator.clipboard.writeText(sql).then(() => {
+                const copyBtn = document.getElementById('copyBtn');
+                const originalText = copyBtn.innerHTML;
+                
+                copyBtn.innerHTML = '<i class="bi bi-check-lg"></i> Copied!';
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Error copying SQL:', err);
+                alert('Failed to copy SQL to clipboard');
+            });
+        }
+        
+        // Show error
+        function showError(message) {
+            updateProgress(`ERROR: ${message}`);
+            document.getElementById('executionResult').className = 'alert alert-danger';
+            document.getElementById('executionResult').textContent = message;
+            document.getElementById('executionResult').style.display = 'block';
+        }
+        
+        // Hide loading modal
+        function hideLoadingModal() {
+            loadingModal.hide();
+        }
+    </script>
+</body>
+</html> 
